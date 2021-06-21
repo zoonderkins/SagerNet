@@ -8,6 +8,7 @@ include(":plugin:naive")
 include(":plugin:pingtunnel")
 include(":plugin:relaybaton")
 include(":plugin:brook")
+include(":plugin:clash")
 
 include(":external:preferencex:preferencex")
 include(":external:preferencex:preferencex-simplemenu")
