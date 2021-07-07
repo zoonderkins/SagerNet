@@ -35,6 +35,8 @@ import androidx.annotation.RequiresApi
 import io.nekohasekai.sagernet.*
 import io.nekohasekai.sagernet.database.DataStore
 import io.nekohasekai.sagernet.ktx.Logs
+import io.nekohasekai.sagernet.ktx.formatObject
+import io.nekohasekai.sagernet.ktx.int
 import io.nekohasekai.sagernet.ui.VpnRequestActivity
 import io.nekohasekai.sagernet.utils.DefaultNetworkListener
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +44,7 @@ import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileDescriptor
 import java.io.IOException
+import java.math.BigInteger
 import android.net.VpnService as BaseVpnService
 
 class VpnService : BaseVpnService(), BaseService.Interface {
@@ -85,7 +88,7 @@ class VpnService : BaseVpnService(), BaseService.Interface {
 
     override suspend fun startProcesses() {
         super.startProcesses()
-        sendFd(startVpn())
+        startVpn()
     }
 
     override fun killProcesses(scope: CoroutineScope) {
@@ -125,7 +128,7 @@ class VpnService : BaseVpnService(), BaseService.Interface {
         override fun getLocalizedMessage() = getString(R.string.reboot_required)
     }
 
-    private suspend fun startVpn(): FileDescriptor {
+    private suspend fun startVpn() {
 
         val profile = data.proxy!!.profile
         val builder = Builder().setConfigureIntent(SagerNet.configureIntent(this))
@@ -196,36 +199,58 @@ class VpnService : BaseVpnService(), BaseService.Interface {
         val conn = builder.establish() ?: throw NullConnectionException()
         this.conn = conn
 
-        val cmd = arrayListOf(
-            File(applicationInfo.nativeLibraryDir, Executable.TUN2SOCKS).canonicalPath,
-            "--netif-ipaddr",
-            PRIVATE_VLAN4_ROUTER,
-            "--socks-server-addr",
-            "127.0.0.1:${DataStore.socksPort}",
-            "--tunmtu",
-            VPN_MTU.toString(),
-            "--sock-path",
-            File(SagerNet.deviceStorage.noBackupFilesDir, "sock_path").canonicalPath,
-            "--loglevel",
-            "warning"
-        )
-        if (!useSystemDns) {
-            cmd += "--dnsgw"
-            cmd += "127.0.0.1:${DataStore.localDNSPort}"
+        val cmd: ArrayList<String>
+        val env = hashMapOf<String, String>()
+        val useNewTun2socks = DataStore.useNewTun2socks
+        if (!useNewTun2socks) {
+            cmd = arrayListOf(
+                File(applicationInfo.nativeLibraryDir, Executable.TUN2SOCKS).canonicalPath,
+                "--netif-ipaddr",
+                PRIVATE_VLAN4_ROUTER,
+                "--socks-server-addr",
+                "127.0.0.1:${DataStore.socksPort}",
+                "--tunmtu",
+                VPN_MTU.toString(),
+                "--sock-path",
+                File(SagerNet.deviceStorage.noBackupFilesDir, "sock_path").canonicalPath,
+                "--loglevel",
+                "warning"
+            )
+            if (!useSystemDns) {
+                cmd += "--dnsgw"
+                cmd += "127.0.0.1:${DataStore.localDNSPort}"
+            }
+            if (ipv6Mode != IPv6Mode.DISABLE) {
+                cmd += "--netif-ip6addr"
+                cmd += PRIVATE_VLAN6_ROUTER
+            }
+            cmd += "--enable-udprelay"
+        } else {
+            cmd = arrayListOf(
+                "su",
+                "-c",
+                File(applicationInfo.nativeLibraryDir, Executable.TUN2SOCKS_NEW).canonicalPath,
+                "--proxy",
+                "socks5://127.0.0.1:${DataStore.socksPort}",
+                "--mtu",
+                VPN_MTU.toString(),
+                "--device",
+                "tun://tun1"
+            )
+            Logs.d(formatObject(env))
         }
-        if (ipv6Mode != IPv6Mode.DISABLE) {
-            cmd += "--netif-ip6addr"
-            cmd += PRIVATE_VLAN6_ROUTER
-        }
-        cmd += "--enable-udprelay"
-        data.processes!!.start(cmd, onRestartCallback = {
-            try {
-                sendFd(conn.fileDescriptor)
-            } catch (e: ErrnoException) {
-                stopRunner(false, e.message)
+        data.processes!!.start(cmd, env, onRestartCallback = {
+            if (!useNewTun2socks) {
+                try {
+                    sendFd(conn.fileDescriptor)
+                } catch (e: ErrnoException) {
+                    stopRunner(false, e.message)
+                }
             }
         })
-        return conn.fileDescriptor
+        if (!useNewTun2socks) {
+            sendFd(conn.fileDescriptor)
+        }
     }
 
     private suspend fun sendFd(fd: FileDescriptor) {

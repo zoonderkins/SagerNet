@@ -55,3 +55,6 @@
 [submodule "external/v2ray-core"]
 	path = external/v2ray-core
 	url = https://github.com/v2fly/v2ray-core
+[submodule "library/core/src/main/go/tun2socks"]
+	path = library/core/src/main/go/tun2socks
+	url = https://github.com/nekohasekai/tun2socks

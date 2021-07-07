@@ -164,6 +164,8 @@ object DataStore : OnPreferenceDataStoreChangeListener {
     var connectionTestURL by configurationStore.string(Key.CONNECTION_TEST_URL) { CONNECTION_TEST_URL }
     var alwaysShowAddress by configurationStore.boolean(Key.ALWAYS_SHOW_ADDRESS)
 
+    var useNewTun2socks by configurationStore.boolean(Key.USE_NEW_TUN2SOCKS) { true }
+
     // cache
 
     var dirty by profileCacheStore.boolean(Key.PROFILE_DIRTY)

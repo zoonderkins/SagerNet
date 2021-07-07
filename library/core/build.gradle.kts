@@ -3,3 +3,4 @@ plugins {
 }
 
 setupNdkLibrary()
+setupLibrary("tun2socks")

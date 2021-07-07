@@ -273,6 +273,63 @@ fun Project.setupAppCommon() {
     }
 }
 
+fun Project.setupLibrary(projectName: String) {
+    val projName = projectName.toLowerCase(Locale.ROOT)
+    val targetAbi = requireTargetAbi()
+
+    android.apply {
+
+        splits.abi {
+            isEnable = true
+            isUniversalApk = false
+
+            if (targetAbi.isNotBlank()) {
+                reset()
+                include(targetAbi)
+            }
+        }
+
+        if (System.getenv("SKIP_BUILD") != "on") {
+            if (targetAbi.isBlank()) {
+                tasks.register<Exec>("externalBuild") {
+                    executable(rootProject.file("run"))
+                    args("lib", projName)
+                    workingDir(rootProject.projectDir)
+                }
+
+                tasks.whenTaskAdded {
+                    if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
+                        dependsOn("externalBuild")
+                    }
+                }
+            } else {
+                tasks.register<Exec>("externalBuildInit") {
+                    executable(rootProject.file("run"))
+                    args("lib", projName, "init")
+                    workingDir(rootProject.projectDir)
+                }
+                tasks.register<Exec>("externalBuild") {
+                    executable(rootProject.file("run"))
+                    args("lib", projName, targetAbi)
+                    workingDir(rootProject.projectDir)
+                    dependsOn("externalBuildInit")
+                }
+                tasks.register<Exec>("externalBuildEnd") {
+                    executable(rootProject.file("run"))
+                    args("lib", projName, "end")
+                    workingDir(rootProject.projectDir)
+                    dependsOn("externalBuild")
+                }
+                tasks.whenTaskAdded {
+                    if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
+                        dependsOn("externalBuildEnd")
+                    }
+                }
+            }
+        }
+    }
+}
+
 fun Project.setupPlugin(projectName: String) {
     val propPrefix = projectName.toUpperCase(Locale.ROOT)
     val projName = projectName.toLowerCase(Locale.ROOT)
